@@ -6,6 +6,7 @@ import altair as alt
 
 st.set_page_config(layout="wide")
 st.title("Galambos Capital Dashboard")
+base = Path(__file__).parent
 
 st.markdown(
     """
@@ -16,7 +17,7 @@ st.markdown(
 @st.cache_data
 def load_data():
     try:
-        excel_path = Path("streamlit_performances.xlsx")
+        excel_path = Path(base / "streamlit_performances.xlsx")
 
         if not excel_path.is_file():
             st.error(f"FATAL: The Excel file '{excel_path}' was not found.")
