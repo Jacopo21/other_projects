@@ -55,7 +55,6 @@ def load_data():
         st.error(f"An error occurred while loading the data: {e}")
         return None
 
-# --- PLOTTING FUNCTION ---
 def plot_performance(df, fund_name):
     if df is None or 'cumulative returns' not in df.columns:
         st.warning(f"Cannot plot performance for {fund_name} as 'cumulative returns' data is missing.")
@@ -71,7 +70,6 @@ def plot_performance(df, fund_name):
     
     st.altair_chart(chart, use_container_width=True)
 
-# --- MAIN APPLICATION LOGIC ---
 data_frames = load_data()
 
 if data_frames:
