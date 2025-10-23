@@ -4,6 +4,27 @@ import pandas as pd
 from pathlib import Path
 import altair as alt
 import openpyxl
+from translations import TRANSLATIONS 
+
+if 'language' not in st.session_state:
+    st.session_state['language'] = 'en' 
+st.sidebar.title("Settings")
+language_options = {
+    "English": "en",
+    "Magyar (Hungarian)": "hu"
+}
+def set_language():
+    st.session_state.language = language_options[st.session_state.lang_selector]
+
+selected_language_key = st.sidebar.selectbox(
+    "Language / Nyelv",
+    options=list(language_options.keys()),
+    key='lang_selector',
+    on_change=set_language 
+)
+
+def _(key):
+    return TRANSLATIONS[st.session_state.language].get(key, key)
 
 st.set_page_config(layout="wide")
 st.title("Galambos Capital Dashboard")
