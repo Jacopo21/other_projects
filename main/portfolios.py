@@ -33,7 +33,7 @@ def _(key):
 col1, col2 = st.columns([1, 6], vertical_alignment="center")
 
 with col1:
-    logo_path = Path(__file__).parent / "logo3.png"
+    logo_path = Path(__file__).parent / "logo2.png"
     st.image(str(logo_path), width=2460*2)
 
 with col2:
