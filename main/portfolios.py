@@ -6,11 +6,14 @@ import altair as alt
 import openpyxl
 from translations import TRANSLATIONS 
 
+st.set_page_config(layout="wide")
+
 if 'language' not in st.session_state:
     st.session_state['language'] = 'en' 
 st.sidebar.title("Settings")
 language_options = {
     "English": "en",
+    "Deutsch": "de",
     "Magyar (Hungarian)": "hu"
 }
 def set_language():
@@ -26,19 +29,27 @@ selected_language_key = st.sidebar.selectbox(
 def _(key):
     return TRANSLATIONS[st.session_state.language].get(key, key)
 
-st.set_page_config(layout="wide")
-st.title("Galambos Capital Dashboard")
+
+col1, col2 = st.columns([1, 6], vertical_alignment="center")
+
+with col1:
+    logo_path = Path(__file__).parent / "logo2.png"
+    st.image(str(logo_path), width=2460*2)
+
+with col2:
+    st.title("Galambos Capital Dashboard")
+
+
 base = Path(__file__).parent
 
 st.markdown(
     """
-    Welcome to our interactive portfolio dashboard. Use the sidebar to select a fund and explore its performance over time.
+    Welcome to our interactive portfolios dashboard. Use the sidebar to select a fund and explore the performance over time.
     """
 )
 
 @st.cache_data
 def load_data():
-    # ... (Your data loading function remains unchanged) ...
     try:
         excel_path = Path(base / "streamlit_performances.xlsx")
 
@@ -49,7 +60,8 @@ def load_data():
         
         data = {
             "IBUST": pd.read_excel(excel_path, sheet_name="IBUST"),
-            "USEquity500": pd.read_excel(excel_path, sheet_name="USEquity500")
+            "USEquity500": pd.read_excel(excel_path, sheet_name="USEquity500"),
+            "Portfolio": pd.read_excel(excel_path, sheet_name="Portfolio")
         }
         
         for name, df in data.items():
@@ -85,7 +97,7 @@ def plot_performance(df, fund_name):
         st.warning(f"Cannot plot performance for {fund_name} as 'cumulative returns' data is missing.")
         return
     
-    chart = alt.Chart(df).mark_line(color='black', strokeWidth=2).encode(
+    chart = alt.Chart(df).mark_line(color='red', strokeWidth=2).encode(
         x=alt.X("date:T", title=_("chart_date")), # TRANSLATED
         y=alt.Y("cumulative returns:Q", title=_("chart_cumulative_returns"), scale=alt.Scale(zero=False)), # TRANSLATED
         tooltip=[alt.Tooltip("date:T", title=_("chart_date")), alt.Tooltip("cumulative returns:Q", title=_("chart_tooltip_returns"), format=",.2f")] # TRANSLATED
@@ -159,4 +171,3 @@ if data_frames:
         st.dataframe(df_selected)
 else:
     st.warning(_("dashboard_load_error"))
-    
