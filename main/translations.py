@@ -99,5 +99,38 @@ TRANSLATIONS = {
         "total_return": "Teljes Hozam",
         "avg_leverage": "Átl. Tőkeáttétel",
         "avg_return": "Átl. Hozam"
+    },
+    "en": {
+        "dashboard_title": "Galambos Capital Dashboard",
+        "welcome_message": "Benvenuti sulla nostra piattaforma interattiva per il portafoglio. Usa la barra laterale per selezionare un fondo ed esplorarne le prestazioni nel tempo.",
+        "fund_selection": "Selezione il Fondo",
+        "select_fund": "Select a fund to analyze:",
+        "performance_analysis_for": "Performance Analysis for",
+        "chart_date": "Date",
+        "chart_cumulative_returns": "Cumulative Returns",
+        "chart_tooltip_returns": "Returns",
+        "chart_title": "Cumulative Returns",
+        "overall_performance": "Overall Performance",
+        "monthly_performance": "Monthly Performance Breakdown",
+        "select_month": "Select a Month",
+        "view_raw_data": "View Raw Data for",
+        "dashboard_load_error": "Dashboard could not be loaded. Please check the file path and format.",
+        
+        "total_pnl": "Total PnL",
+        "avg_equity_used": "Avg Equity Used",
+        "overall_win_rate": "Overall Win Rate",
+        "avg_win_pnl": "Avg Win PnL",
+        "long_trades": "Long Trades",
+        "long_win_rate": "Long Win Rate",
+        "short_trades": "Short Trades",
+        "short_win_rate": "Short Win Rate",
+        "monthly_pnl": "Monthly PnL",
+        "avg_equity": "Avg Equity",
+        "win_rate": "Win Rate",
+        "total_profit_loss": "Total Profit & Loss",
+        "average_leverage": "Average Leverage",
+        "total_return": "Total Return",
+        "avg_leverage": "Avg Leverage",
+        "avg_return": "Avg Return"
     }
 }
