@@ -206,7 +206,7 @@ def get_portfolio_data():
                 
                 # Anchor for chart
                 inception_row = pd.DataFrame([{
-                    'date': first_date - timedelta(days=1),
+                    'date': first_date,
                     'nav': first_invested,
                     'invested': first_invested
                 }])

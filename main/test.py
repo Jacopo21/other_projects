@@ -122,7 +122,8 @@ def get_portfolio_data():
         first_purchase = purchases['bought_on'].min()
         
         # --- Date Handling ---
-        # Include today (15th) to show the "doubling" effect.
+        # We ensure the 15th (Today) is included to reflect the NAV doubling.
+        # Yahoo Finance 'end' is exclusive, so we use today + 1 day.
         today = datetime.now().date()
         end_date = today + timedelta(days=1) 
         start_date = first_purchase
@@ -138,9 +139,11 @@ def get_portfolio_data():
             )['Close']
         except Exception as e:
             st.warning(f"Warning: Issue fetching data from Yahoo Finance ({e}). Attempting fallback.")
-            market_data = pd.DataFrame() # Fallback to empty to trigger logic below
+            market_data = pd.DataFrame() 
         
+        # --- Data Cleanup & Fallback ---
         if market_data.empty:
+             # Create empty index range if download failed entirely (e.g. 2025 dates)
              date_range = pd.date_range(start=start_date, end=today, freq='B')
              market_data = pd.DataFrame(index=date_range)
         
@@ -149,25 +152,30 @@ def get_portfolio_data():
             
         market_data.index = market_data.index.tz_localize(None)
 
+        # 1. Handle Ticker Renaming
         if 'GC=F' in market_data.columns:
-            market_data.rename(columns={'GC=F': 'GOLD'}, inplace=True)
-        purchases['ticker'] = purchases['ticker'].replace('GC=F', 'GOLD')
-        
+            market_data.rename(columns={'GC=F': 'Gold'}, inplace=True)
+        purchases['ticker'] = purchases['ticker'].replace('GC=F', 'Gold')
         tickers = purchases['ticker'].unique().tolist()
 
+        # 2. Fallback for Missing Tickers 
+        # (Essential for 2025 simulation where YF returns nothing)
         for t in tickers:
             if t not in market_data.columns:
                 match = purchases[purchases['ticker'] == t]
                 if not match.empty:
+                    # Use Purchase Price as proxy if Market Price is missing
                     fallback_price = match['price'].iloc[0]
                     market_data[t] = fallback_price
         
-        market_data = market_data.ffill().bfill()        
+        # 3. Fill Gaps
+        market_data = market_data.ffill().bfill()
+        # Filter Weekends
         market_data = market_data[market_data.index.dayofweek < 5]
 
         nav_series = []
         
-    
+        # --- NAV Loop ---
         for date, prices in market_data.iterrows():
             
             # Identify active holdings on this date
@@ -185,11 +193,12 @@ def get_portfolio_data():
                 qty = row['amount']
                 purchase_price = row['price']
                 
-                # NAV
+                # NAV: Current Market Value
                 if t in prices and not pd.isna(prices[t]):
                     daily_nav += prices[t] * qty
                 
-                # Invested (Sums all purchases -> Weighted Average Logic)
+                # Invested: Cost Basis (Sum of Price * Qty for all purchases)
+                # This correctly accounts for the weighted average price
                 daily_invested += purchase_price * qty
             
             nav_series.append({'date': date, 'nav': daily_nav, 'invested': daily_invested})
@@ -201,17 +210,10 @@ def get_portfolio_data():
             
             if not real_activity_df.empty:
                 nav_df = real_activity_df.reset_index(drop=True)
-                first_date = nav_df.iloc[0]['date']
-                first_invested = nav_df.iloc[0]['invested']
                 
-                # Anchor for chart
-                inception_row = pd.DataFrame([{
-                    'date': first_date - timedelta(days=1),
-                    'nav': first_invested,
-                    'invested': first_invested
-                }])
+                # --- CHANGE: Removed Inception Row (7th) ---
+                # Chart will now start exactly on the first purchase date (8th)
                 
-                nav_df = pd.concat([inception_row, nav_df]).reset_index(drop=True)
                 nav_df['cumulative returns'] = (nav_df['nav'] - nav_df['invested']) / nav_df['invested']
             else:
                 nav_df['cumulative returns'] = 0.0
@@ -241,9 +243,7 @@ def get_portfolio_data():
         total_mv = holdings_snapshot['market_value'].sum()
         holdings_snapshot['weight'] = (holdings_snapshot['market_value'] / total_mv) * 100
         holdings_snapshot['unrealized_pnl'] = holdings_snapshot['market_value'] - holdings_snapshot['cost_basis_total']
-        holdings_snapshot['return_pct'] = (holdings_snapshot['unrealized_pnl'] / holdings_snapshot['cost_basis_total'])*100
-        holdings_snapshot['return_pct'] = holdings_snapshot['return_pct'].round(2)
-
+        holdings_snapshot['return_pct'] = holdings_snapshot['unrealized_pnl'] / holdings_snapshot['cost_basis_total']
 
         return nav_df, holdings_snapshot, market_data
 
@@ -431,7 +431,6 @@ elif st.session_state.page == 'portfolio':
         
         st.altair_chart(pie + text, use_container_width=True)
         
-        # DataFrame Display with Avg Entry Price
         display_df = holdings[['ticker', 'amount', 'avg_entry_price', 'current_price', 'market_value', 'unrealized_pnl', 'weight', 'return_pct']].copy()
         
         st.dataframe(
@@ -457,13 +456,14 @@ elif st.session_state.page == 'portfolio':
         selected_asset = st.selectbox("Select Asset to View Price History", options=asset_options)
         
         if selected_asset and selected_asset in market_data.columns:
+            # Filter Data: YTD up to Today
             current_year = datetime.now().year
             ytd_start = datetime(current_year, 1, 1)
             
             asset_df = market_data[[selected_asset]].copy()
-            
             asset_df = asset_df.reset_index()
-            asset_df.columns = ['date', 'close'] 
+            # Explicitly rename columns to prevent KeyError
+            asset_df.columns = ['date', 'close']
             
             asset_df = asset_df[asset_df['date'] >= ytd_start]
             asset_df = asset_df.dropna()
