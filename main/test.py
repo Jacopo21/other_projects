@@ -103,7 +103,6 @@ def load_static_data():
 
 @st.cache_data(ttl=3600)
 def get_portfolio_data():
-    """Calculates live portfolio performance using Weighted Average Price logic with robust fallbacks."""
     try:
         portfolio_path = base / "portfolioGC.xlsx"
         if not portfolio_path.is_file():
@@ -121,69 +120,58 @@ def get_portfolio_data():
         
         first_purchase = purchases['bought_on'].min()
         
-        # --- Date Handling ---
-        # We ensure the 15th (Today) is included to reflect the NAV doubling.
-        # Yahoo Finance 'end' is exclusive, so we use today + 1 day.
+        # FIX: Usa sempre oggi, non +1
         today = datetime.now().date()
-        end_date = today + timedelta(days=1) 
-        start_date = first_purchase
+        start_date = first_purchase.date()
 
+        # FIX: Scarica sempre Close prices
         try:
             market_data = yf.download(
                 tickers, 
                 start=start_date, 
-                end=end_date, 
+                end=today,  # Fine oggi
                 interval='1d', 
-                auto_adjust=True, 
+                auto_adjust=False,  # Mantieni i dati raw
                 progress=False
-            )['Close']
+            )['Close']  # Prendi solo Close
         except Exception as e:
-            st.warning(f"Warning: Issue fetching data from Yahoo Finance ({e}). Attempting fallback.")
-            market_data = pd.DataFrame() 
+            st.warning(f"Yahoo Finance error: {e}")
+            market_data = pd.DataFrame()
         
-        # --- Data Cleanup & Fallback ---
         if market_data.empty:
-             # Create empty index range if download failed entirely (e.g. 2025 dates)
-             date_range = pd.date_range(start=start_date, end=today, freq='B')
-             market_data = pd.DataFrame(index=date_range)
+            date_range = pd.date_range(start=start_date, end=today, freq='B')
+            market_data = pd.DataFrame(index=date_range)
         
         if isinstance(market_data, pd.Series):
             market_data = market_data.to_frame(name=tickers[0])
             
         market_data.index = market_data.index.tz_localize(None)
 
-        # 1. Handle Ticker Renaming
+        # Rinomina GC=F
         if 'GC=F' in market_data.columns:
             market_data.rename(columns={'GC=F': 'Gold'}, inplace=True)
         purchases['ticker'] = purchases['ticker'].replace('GC=F', 'Gold')
         tickers = purchases['ticker'].unique().tolist()
 
-        # 2. Fallback for Missing Tickers 
-        # (Essential for 2025 simulation where YF returns nothing)
+        # Fallback per ticker mancanti
         for t in tickers:
             if t not in market_data.columns:
                 match = purchases[purchases['ticker'] == t]
                 if not match.empty:
-                    # Use Purchase Price as proxy if Market Price is missing
                     fallback_price = match['price'].iloc[0]
                     market_data[t] = fallback_price
         
-        # 3. Fill Gaps
-        market_data = market_data.ffill().bfill()
-        # Filter Weekends
+        # FIX: Filtra weekend PRIMA del fill
         market_data = market_data[market_data.index.dayofweek < 5]
+        market_data = market_data.ffill().bfill()
 
         nav_series = []
         
-        # --- NAV Loop ---
         for date, prices in market_data.iterrows():
-            
-            # Identify active holdings on this date
             active_holdings = purchases[purchases['bought_on'] <= date].copy()
             
             if active_holdings.empty:
-                nav_series.append({'date': date, 'nav': 0.0, 'invested': 0.0})
-                continue
+                continue  # Salta giorni senza acquisti
 
             daily_nav = 0
             daily_invested = 0
@@ -193,12 +181,9 @@ def get_portfolio_data():
                 qty = row['amount']
                 purchase_price = row['price']
                 
-                # NAV: Current Market Value
                 if t in prices and not pd.isna(prices[t]):
                     daily_nav += prices[t] * qty
                 
-                # Invested: Cost Basis (Sum of Price * Qty for all purchases)
-                # This correctly accounts for the weighted average price
                 daily_invested += purchase_price * qty
             
             nav_series.append({'date': date, 'nav': daily_nav, 'invested': daily_invested})
@@ -206,19 +191,24 @@ def get_portfolio_data():
         nav_df = pd.DataFrame(nav_series)
         
         if not nav_df.empty:
-            real_activity_df = nav_df[nav_df['invested'] > 0]
+            # FIX: Aggiungi punto ZERO esattamente l'8 dicembre
+            inception_date = nav_df.iloc[0]['date']
+            inception_invested = nav_df.iloc[0]['invested']
             
-            if not real_activity_df.empty:
-                nav_df = real_activity_df.reset_index(drop=True)
-                
-                # --- CHANGE: Removed Inception Row (7th) ---
-                # Chart will now start exactly on the first purchase date (8th)
-                
-                nav_df['cumulative returns'] = (nav_df['nav'] - nav_df['invested']) / nav_df['invested']
-            else:
-                nav_df['cumulative returns'] = 0.0
+            # Inserisci riga iniziale con return = 0%
+            inception_row = pd.DataFrame([{
+                'date': inception_date,
+                'nav': inception_invested,  # NAV = Invested al giorno 0
+                'invested': inception_invested,
+                'cumulative returns': 0.0  # Return = 0%
+            }])
+            
+            nav_df = pd.concat([inception_row, nav_df[1:]], ignore_index=True)
+            
+            # Ricalcola returns
+            nav_df['cumulative returns'] = (nav_df['nav'] - nav_df['invested']) / nav_df['invested']
 
-        # --- Holdings Snapshot (Latest) ---
+        # Holdings snapshot (uguale)
         latest_prices = market_data.iloc[-1]
         
         holdings_snapshot = purchases.groupby('ticker').agg({
@@ -228,7 +218,6 @@ def get_portfolio_data():
 
         holdings_snapshot['current_price'] = holdings_snapshot['ticker'].map(latest_prices)
         holdings_snapshot = holdings_snapshot.dropna(subset=['current_price'])
-        
         holdings_snapshot['market_value'] = holdings_snapshot['amount'] * holdings_snapshot['current_price']
         
         def get_total_cost(ticker):
@@ -236,8 +225,6 @@ def get_portfolio_data():
             return (rows['amount'] * rows['price']).sum()
 
         holdings_snapshot['cost_basis_total'] = holdings_snapshot['ticker'].apply(get_total_cost)
-        
-        # Weighted Average Entry Price
         holdings_snapshot['avg_entry_price'] = holdings_snapshot['cost_basis_total'] / holdings_snapshot['amount']
         
         total_mv = holdings_snapshot['market_value'].sum()
@@ -248,8 +235,9 @@ def get_portfolio_data():
         return nav_df, holdings_snapshot, market_data
 
     except Exception as e:
-        st.error(f"Error calculating portfolio: {e}")
+        st.error(f"Error: {e}")
         return None, None, None
+
 
 def plot_chart(df, y_col, title, color='red', format_type='percent', area=False):
     if df is None or df.empty:
